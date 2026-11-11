@@ -1,0 +1,12 @@
+[
+  { "id": "sharp_embers", "name": "Sharp Embers", "desc": "+25% damage", "effects": [{ "stat": "damage", "op": "mul", "value": 1.25 }] },
+  { "id": "quick_hands", "name": "Quick Hands", "desc": "Attack 20% faster", "effects": [{ "stat": "fireCooldown", "op": "mul", "value": 0.8 }] },
+  { "id": "fleet_feet", "name": "Fleet Feet", "desc": "+12% move speed", "effects": [{ "stat": "moveSpeed", "op": "mul", "value": 1.12 }] },
+  { "id": "iron_heart", "name": "Iron Heart", "desc": "+25 max health and heal 25", "effects": [{ "stat": "maxHp", "op": "add", "value": 25 }], "heal": 25 },
+  { "id": "split_shot", "name": "Split Shot", "desc": "+1 projectile, -15% damage", "effects": [{ "stat": "projectiles", "op": "add", "value": 1 }, { "stat": "damage", "op": "mul", "value": 0.85 }] },
+  { "id": "piercing_flame", "name": "Piercing Flame", "desc": "Shots pass through 1 more enemy", "effects": [{ "stat": "pierce", "op": "add", "value": 1 }] },
+  { "id": "long_reach", "name": "Long Reach", "desc": "+25% range and shot speed", "effects": [{ "stat": "range", "op": "mul", "value": 1.25 }, { "stat": "projSpeed", "op": "mul", "value": 1.25 }] },
+  { "id": "second_wind", "name": "Second Wind", "desc": "Regenerate 1 health per second", "effects": [{ "stat": "regen", "op": "add", "value": 1 }] },
+  { "id": "flame_nova", "name": "Flame Nova", "desc": "A burst around you every few seconds (+14 damage)", "effects": [{ "stat": "novaDamage", "op": "add", "value": 14 }] },
+  { "id": "blood_torch", "name": "Blood Torch", "desc": "Heal 1 health per kill", "effects": [{ "stat": "healOnKill", "op": "add", "value": 1 }] }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "id": "grunt",
+    "name": "Grunt",
+    "behavior": "chase",
+    "hp": 20,
+    "speed": 64,
+    "radius": 11,
+    "contactDamage": 9,
+    "minFloor": 1,
+    "weight": 10
+  },
+  {
+    "id": "dasher",
+    "name": "Dasher",
+    "behavior": "dash",
+    "hp": 13,
+    "speed": 50,
+    "radius": 9,
+    "contactDamage": 13,
+    "minFloor": 1,
+    "weight": 4,
+    "triggerRange": 175,
+    "windup": 0.55,
+    "dashSpeed": 340,
+    "dashTime": 0.42,
+    "cooldown": 1.2
+  },
+  {
+    "id": "spitter",
+    "name": "Spitter",
+    "behavior": "spit",
+    "hp": 17,
+    "speed": 50,
+    "radius": 10,
+    "contactDamage": 6,
+    "minFloor": 2,
+    "weight": 4,
+    "keepRange": 150,
+    "rangeSlack": 25,
+    "shotCooldown": 2.1,
+    "shotSpeed": 140,
+    "shotDamage": 9,
+    "shotRadius": 5
+  }
+]
