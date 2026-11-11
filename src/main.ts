@@ -6,7 +6,15 @@ import { botInput } from './sim';
 import { Controller } from './client/controller';
 import { attachInput } from './client/input';
 import { RENDER_SCALE, RunScene } from './client/scene';
-import { loadBest, loadOverrides, loadSave, storeBest } from './client/storage';
+import {
+  dailySeed,
+  loadBest,
+  loadDailyBest,
+  loadOverrides,
+  loadSave,
+  storeBest,
+  storeDailyBest,
+} from './client/storage';
 import { strings } from './client/strings';
 import { Ui } from './client/ui';
 
@@ -72,6 +80,15 @@ const ui = new Ui(uiRoot, controller, sfx, {
     // The seed only needs to differ between runs. From Phase 2 the server issues it.
     controller.newRun((Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
   },
+  startDaily: () => {
+    sfx.unlock();
+    sfx.play('start');
+    ui.hideOverlay();
+    ui.setHudVisible(true);
+    // The Daily run always uses the default tuning, so everyone climbs the same tower.
+    controller.setOverrides({});
+    controller.newRun(dailySeed());
+  },
   continueRun: () => {
     const save = loadSave();
     if (!save) return ui.showTitle();
@@ -95,6 +112,7 @@ controller.onPhase = (phase) => {
     const best = loadBest();
     const newBest = state.floor > best;
     if (newBest) storeBest(state.floor);
+    if (state.seed === dailySeed() && state.floor > loadDailyBest()) storeDailyBest(state.floor);
     // Let the death burst play out before covering it.
     window.setTimeout(() => {
       if (controller.state === state) ui.showDead(state, newBest && best > 0);

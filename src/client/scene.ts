@@ -35,7 +35,18 @@ const COLORS = {
   exit: 0x7ad7ff,
   pillar: 0x35304a,
   pillarTop: 0x4b4568,
-  enemy: { grunt: 0xd9534f, dasher: 0xb072f0, spitter: 0x5fbf6a } as Record<string, number>,
+  enemy: {
+    grunt: 0xd9534f,
+    dasher: 0xb072f0,
+    spitter: 0x5fbf6a,
+    swarmer: 0xff8c42,
+    brute: 0x9c4a3c,
+    bomber: 0xffd23f,
+    sniper: 0x4fc3f7,
+    splitter: 0xe75480,
+    warden: 0xc0392b,
+    matriarch: 0x9b59b6,
+  } as Record<string, number>,
 };
 
 /** Floor tile colors, cycling every few floors so climbing looks like progress. */
@@ -91,14 +102,28 @@ export class RunScene extends Phaser.Scene {
           break;
         case 'hit':
           this.flashes.set(ev.id, 5);
-          this.burst(ev.x, ev.y, 3, COLORS.shot, 70);
+          this.burst(ev.x, ev.y, ev.crit ? 8 : 3, ev.crit ? 0xffffff : COLORS.shot, ev.crit ? 130 : 70);
           this.sfx.play('hit');
           break;
         case 'kill':
           this.burst(ev.x, ev.y, 12, COLORS.enemy[ev.type] ?? 0xffffff, 150);
           if (this.rings.length < 24) this.rings.push({ x: ev.x, y: ev.y, r: 26, life: 0.25, max: 0.25, color: 0xffffff });
-          this.shake(70, 0.004);
+          if (ev.boss) {
+            this.burst(ev.x, ev.y, 50, 0xffffff, 260);
+            this.rings.push({ x: ev.x, y: ev.y, r: 160, life: 0.6, max: 0.6, color: COLORS.enemy[ev.type] ?? 0xffffff });
+            this.shake(350, 0.018);
+            this.sfx.play('nova');
+            vibrate([40, 30, 80]);
+          } else {
+            this.shake(70, 0.004);
+          }
           this.sfx.play('kill');
+          break;
+        case 'explode':
+          this.burst(ev.x, ev.y, 22, COLORS.enemy.bomber, 200);
+          this.rings.push({ x: ev.x, y: ev.y, r: ev.r, life: 0.3, max: 0.3, color: COLORS.enemy.bomber });
+          this.shake(140, 0.01);
+          this.sfx.play('nova');
           break;
         case 'hurt':
           this.hurtFlash = 0.25;
@@ -134,7 +159,7 @@ export class RunScene extends Phaser.Scene {
             this.rings.push({ x: state.player.x, y: state.player.y, r: 140, life: 0.5, max: 0.5, color: COLORS.exit });
           }
           if (!this.reducedMotion) this.cameras.main.flash(160, 122, 215, 255);
-          this.sfx.play('climb');
+          this.sfx.play(ev.boss ? 'windup' : 'climb');
           vibrate(15);
           break;
         case 'segmentEnd':
@@ -306,12 +331,38 @@ export class RunScene extends Phaser.Scene {
           e.y - fy * r * 0.9 - fx * r,
         );
       } else {
-        g.fillStyle(color, 1);
+        if (def.behavior === 'bomb' && e.mode === 1) {
+          // Show exactly where the blast will reach.
+          const blast = def.blastRadius ?? 60;
+          g.fillStyle(COLORS.enemy.bomber, 0.1 + 0.12 * pulse);
+          g.fillCircle(e.x, e.y, blast);
+          g.lineStyle(1.5, COLORS.enemy.bomber, 0.8);
+          g.strokeCircle(e.x, e.y, blast);
+        }
+        if (def.behavior === 'spit' && e.mode === 1) {
+          g.lineStyle(2, 0xff4d6d, 0.25 + 0.35 * pulse);
+          g.lineBetween(e.x, e.y, e.x + e.vx * 420, e.y + e.vy * 420);
+        }
+        if (def.boss) {
+          g.lineStyle(3, 0xffffff, 0.25 + 0.25 * pulse);
+          g.strokeCircle(e.x, e.y, r + 5);
+        }
+        const fuse = def.behavior === 'bomb' && e.mode === 1 && Math.floor(now / 60) % 2 === 0;
+        g.fillStyle(fuse ? 0xffffff : color, 1);
         g.fillCircle(e.x, e.y, r);
-        if (def.behavior === 'spit') {
-          g.fillStyle(0x1c3a22, 1);
+        if (def.splitInto) {
+          g.fillStyle(0x5a1730, 1);
+          g.fillCircle(e.x - r * 0.4, e.y + r * 0.25, r * 0.22);
+          g.fillCircle(e.x + r * 0.4, e.y + r * 0.25, r * 0.22);
+          g.fillCircle(e.x, e.y - r * 0.4, r * 0.22);
+        } else if (def.behavior === 'bomb') {
+          g.fillStyle(0x4a3200, 1);
+          g.fillRect(e.x - 1.5, e.y - r * 0.6, 3, r * 0.75);
+          g.fillRect(e.x - 1.5, e.y + r * 0.35, 3, 3);
+        } else if (def.behavior === 'spit' || def.behavior === 'summoner') {
+          g.fillStyle(0x10202a, 1);
           g.fillCircle(e.x + dx * r * 0.45, e.y + dy * r * 0.45, r * 0.42);
-        } else {
+        } else if (r > 7) {
           g.fillStyle(0x3a1414, 1);
           g.fillCircle(e.x + dx * r * 0.45 - dy * r * 0.35, e.y + dy * r * 0.45 + dx * r * 0.35, r * 0.2);
           g.fillCircle(e.x + dx * r * 0.45 + dy * r * 0.35, e.y + dy * r * 0.45 - dx * r * 0.35, r * 0.2);
@@ -336,11 +387,11 @@ export class RunScene extends Phaser.Scene {
       g.fillCircle(s.x, s.y, s.r * 0.4);
     }
 
-    const projR = cfg.tuning.player.projRadius;
+    const projR = cfg.tuning.player.projRadius * state.player.stats.projSize;
     for (const s of state.shots) {
       g.lineStyle(projR * 1.2, COLORS.shot, 0.35);
       g.lineBetween(s.x - s.vx * 2.2, s.y - s.vy * 2.2, s.x, s.y);
-      g.fillStyle(COLORS.shot, 1);
+      g.fillStyle(s.crit ? 0xffffff : COLORS.shot, 1);
       g.fillCircle(s.x, s.y, projR);
     }
 

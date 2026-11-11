@@ -15,6 +15,15 @@ export interface EnemyDef {
   contactDamage: number;
   minFloor: number;
   weight: number;
+  /** Bosses never appear in the random spawn pool. They arrive on boss floors. */
+  boss?: boolean;
+  /** On death, spawn this many of another enemy type. */
+  splitInto?: string;
+  splitCount?: number;
+  // bomb
+  fuse?: number;
+  blastRadius?: number;
+  blastDamage?: number;
   // dash
   triggerRange?: number;
   windup?: number;
@@ -28,6 +37,16 @@ export interface EnemyDef {
   shotSpeed?: number;
   shotDamage?: number;
   shotRadius?: number;
+  /** Seconds a shooter shows its aim line before firing. */
+  aimTime?: number;
+  shotCount?: number;
+  shotSpread?: number;
+  // bosses
+  burstCooldown?: number;
+  summonType?: string;
+  summonCount?: number;
+  summonEvery?: number;
+  summonCap?: number;
 }
 
 export interface UpgradeEffect {
@@ -38,6 +57,8 @@ export interface UpgradeEffect {
 
 export interface UpgradeDef {
   id: string;
+  /** Risky upgrades trade a clear strength for a clear cost. None is purely harmful. */
+  kind: 'safe' | 'risky';
   name: string;
   desc: string;
   effects: UpgradeEffect[];

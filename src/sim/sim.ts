@@ -5,7 +5,7 @@
  */
 import { defaultConfig, type EnemyDef, type SimConfig } from './config';
 import { rand, randInt, randRange } from './rng';
-import type { Enemy, Input, RunState, SimEvent } from './types';
+import type { Enemy, Input, PlayerStats, RunState, SimEvent } from './types';
 import { SIM_VERSION } from './version';
 
 type Events = SimEvent[] | undefined;
@@ -14,6 +14,19 @@ interface Circle {
   x: number;
   y: number;
 }
+
+const DIAG = Math.sqrt(0.5);
+/** Eight evenly spaced unit vectors, for radial bursts without trig. */
+const RADIAL: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [DIAG, DIAG],
+  [0, 1],
+  [-DIAG, DIAG],
+  [-1, 0],
+  [-DIAG, -DIAG],
+  [0, -1],
+  [DIAG, -DIAG],
+];
 
 const defCache = new WeakMap<SimConfig, Map<string, EnemyDef>>();
 
@@ -35,6 +48,11 @@ function ticks(cfg: SimConfig, seconds: number): number {
 
 export function segmentTicks(cfg: SimConfig = defaultConfig): number {
   return ticks(cfg, cfg.tuning.segmentSeconds);
+}
+
+export function isBossFloor(floor: number, cfg: SimConfig = defaultConfig): boolean {
+  const every = cfg.tuning.floor.bossEvery;
+  return every > 0 && floor % every === 0 && cfg.tuning.floor.bosses.length > 0;
 }
 
 export function createRun(seed: number, cfg: SimConfig = defaultConfig): RunState {
@@ -77,6 +95,13 @@ export function createRun(seed: number, cfg: SimConfig = defaultConfig): RunStat
         regen: p.regen,
         novaDamage: p.novaDamage,
         healOnKill: p.healOnKill,
+        critChance: p.critChance,
+        damageTaken: p.damageTaken,
+        thorns: p.thorns,
+        projSize: p.projSize,
+        dropBonus: p.dropBonus,
+        climbHeal: p.climbHeal,
+        novaRate: p.novaRate,
       },
     },
     enemies: [],
@@ -94,10 +119,14 @@ export function createRun(seed: number, cfg: SimConfig = defaultConfig): RunStat
 function enterFloor(state: RunState, floor: number, cfg: SimConfig): void {
   const f = cfg.tuning.floor;
   const { width, height } = cfg.tuning.arena;
+  const boss = isBossFloor(floor, cfg);
+  let quota = Math.min(f.maxQuota, f.baseQuota + f.quotaPerFloor * (floor - 1));
+  if (boss) quota = Math.max(1, Math.round(quota * f.bossQuotaScale));
+
   state.floor = floor;
   state.floorKills = 0;
   state.floorSpawned = 0;
-  state.floorQuota = Math.min(f.maxQuota, f.baseQuota + f.quotaPerFloor * (floor - 1));
+  state.floorQuota = quota;
   state.spawnTimer = ticks(cfg, f.firstSpawnDelay);
   state.exit = null;
   state.enemies = [];
@@ -125,6 +154,16 @@ function enterFloor(state: RunState, floor: number, cfg: SimConfig): void {
       state.pillars.push({ x, y, r });
       break;
     }
+  }
+
+  if (boss) {
+    const index = (floor / f.bossEvery - 1) % f.bosses.length;
+    const def = enemyDef(cfg, f.bosses[index]);
+    // Enter from whichever end of the room is farther from the player.
+    const top = state.player.y > height / 2;
+    addEnemy(state, cfg, def, width / 2, top ? def.radius + 30 : height - def.radius - 30);
+    state.floorQuota++;
+    state.floorSpawned++;
   }
 }
 
@@ -183,12 +222,15 @@ export function lineOfSight(ax: number, ay: number, bx: number, by: number, pad:
   return true;
 }
 
-function hurtPlayer(state: RunState, amount: number, cfg: SimConfig, ev: Events): void {
+/** Returns true if the hit landed (the player was not invulnerable). */
+function hurtPlayer(state: RunState, amount: number, cfg: SimConfig, ev: Events): boolean {
   const p = state.player;
-  if (p.invuln > 0 || amount <= 0) return;
-  p.hp -= amount;
+  if (p.invuln > 0 || amount <= 0) return false;
+  const dealt = amount * p.stats.damageTaken;
+  p.hp -= dealt;
   p.invuln = ticks(cfg, cfg.tuning.player.invulnSeconds);
-  ev?.push({ t: 'hurt', amount });
+  ev?.push({ t: 'hurt', amount: dealt });
+  return true;
 }
 
 function healPlayer(state: RunState, amount: number): void {
@@ -196,16 +238,29 @@ function healPlayer(state: RunState, amount: number): void {
   p.hp = Math.min(p.stats.maxHp, p.hp + amount);
 }
 
+function addEnemy(state: RunState, cfg: SimConfig, def: EnemyDef, x: number, y: number): Enemy {
+  const f = cfg.tuning.floor;
+  const hp = Math.round(def.hp * (1 + f.hpScalePerFloor * (state.floor - 1)));
+  let timer = 0;
+  if (def.behavior === 'spit' || def.behavior === 'summoner') timer = ticks(cfg, (def.shotCooldown ?? 2) / 2);
+  else if (def.behavior === 'warden') timer = ticks(cfg, def.burstCooldown ?? 2.5);
+  const enemy: Enemy = { id: state.nextId++, type: def.id, x, y, hp, maxHp: hp, mode: 0, timer, vx: 0, vy: 0 };
+  clampToArena(enemy, def.radius, cfg);
+  pushOutOfPillars(enemy, def.radius, state);
+  state.enemies.push(enemy);
+  return enemy;
+}
+
 function spawnEnemy(state: RunState, cfg: SimConfig): void {
   const f = cfg.tuning.floor;
   const { width, height } = cfg.tuning.arena;
 
   let total = 0;
-  for (const d of cfg.enemies) if (d.minFloor <= state.floor) total += d.weight;
+  for (const d of cfg.enemies) if (!d.boss && d.minFloor <= state.floor) total += d.weight;
   let roll = rand(state) * total;
   let def = cfg.enemies[0];
   for (const d of cfg.enemies) {
-    if (d.minFloor > state.floor) continue;
+    if (d.boss || d.minFloor > state.floor) continue;
     def = d;
     roll -= d.weight;
     if (roll < 0) break;
@@ -236,23 +291,7 @@ function spawnEnemy(state: RunState, cfg: SimConfig): void {
       break;
     }
   }
-
-  const hp = Math.round(def.hp * (1 + f.hpScalePerFloor * (state.floor - 1)));
-  const enemy: Enemy = {
-    id: state.nextId++,
-    type: def.id,
-    x,
-    y,
-    hp,
-    maxHp: hp,
-    mode: 0,
-    timer: def.behavior === 'spit' ? ticks(cfg, (def.shotCooldown ?? 2) / 2) : 0,
-    vx: 0,
-    vy: 0,
-  };
-  clampToArena(enemy, def.radius, cfg);
-  pushOutOfPillars(enemy, def.radius, state);
-  state.enemies.push(enemy);
+  addEnemy(state, cfg, def, x, y);
   state.floorSpawned++;
 }
 
@@ -328,19 +367,54 @@ function updateAttack(state: RunState, cfg: SimConfig, ev: Events): void {
     const l = Math.sqrt(dx * dx + dy * dy);
     dx /= l;
     dy /= l;
+    const crit = p.stats.critChance > 0 && rand(state) < p.stats.critChance;
     state.shots.push({
       x: p.x + dx * pt.radius,
       y: p.y + dy * pt.radius,
       vx: dx * step,
       vy: dy * step,
       life,
-      damage: p.stats.damage,
+      damage: crit ? p.stats.damage * pt.critMult : p.stats.damage,
       pierce: Math.round(p.stats.pierce),
       hit: [],
+      crit,
     });
   }
   p.fireTimer += p.stats.fireCooldown * cfg.tuning.tickRate;
   ev?.push({ t: 'shoot' });
+}
+
+/** Fire `count` enemy projectiles in a fan around the direction (ux, uy). */
+function fireSpits(
+  state: RunState,
+  cfg: SimConfig,
+  e: Enemy,
+  def: EnemyDef,
+  ux: number,
+  uy: number,
+  damageScale: number,
+  ev: Events,
+): void {
+  const count = def.shotCount ?? 1;
+  const spread = def.shotSpread ?? 0.3;
+  const speed = (def.shotSpeed ?? 140) / cfg.tuning.tickRate;
+  for (let i = 0; i < count; i++) {
+    const k = (i - (count - 1) / 2) * spread;
+    let dx = ux - uy * k;
+    let dy = uy + ux * k;
+    const l = Math.sqrt(dx * dx + dy * dy) || 1;
+    dx /= l;
+    dy /= l;
+    state.spits.push({
+      x: e.x + dx * def.radius,
+      y: e.y + dy * def.radius,
+      vx: dx * speed,
+      vy: dy * speed,
+      r: def.shotRadius ?? 5,
+      damage: (def.shotDamage ?? 8) * damageScale,
+    });
+  }
+  ev?.push({ t: 'spit' });
 }
 
 function updateEnemies(state: RunState, cfg: SimConfig, ev: Events): void {
@@ -350,6 +424,8 @@ function updateEnemies(state: RunState, cfg: SimConfig, ev: Events): void {
   const dt = 1 / cfg.tuning.tickRate;
   const speedScale = Math.min(f.maxSpeedScale, 1 + f.speedScalePerFloor * (state.floor - 1));
   const damageScale = 1 + f.damageScalePerFloor * (state.floor - 1);
+  /** Enemies summoned this tick. Added after the loop so the loop never visits them. */
+  const summoned: { def: EnemyDef; x: number; y: number }[] = [];
 
   for (const e of state.enemies) {
     const def = enemyDef(cfg, e.type);
@@ -394,6 +470,76 @@ function updateEnemies(state: RunState, cfg: SimConfig, ev: Events): void {
     } else if (def.behavior === 'spit') {
       const keep = def.keepRange ?? 150;
       const slack = def.rangeSlack ?? 20;
+      if (e.mode === 1) {
+        // Aiming: the line is shown to the player, and locks for the second half.
+        if (e.timer > ticks(cfg, def.aimTime ?? 0.6) / 2) {
+          e.vx = ux;
+          e.vy = uy;
+        }
+        if (--e.timer <= 0) {
+          fireSpits(state, cfg, e, def, e.vx, e.vy, damageScale, ev);
+          e.mode = 0;
+          e.timer = ticks(cfg, def.shotCooldown ?? 2);
+        }
+      } else {
+        if (d > keep + slack) {
+          e.x += ux * walk;
+          e.y += uy * walk;
+        } else if (d < keep - slack) {
+          e.x -= ux * walk;
+          e.y -= uy * walk;
+        }
+        if (e.timer > 0) e.timer--;
+        else if (d < keep * 1.7) {
+          if (def.aimTime) {
+            e.mode = 1;
+            e.timer = ticks(cfg, def.aimTime);
+            e.vx = ux;
+            e.vy = uy;
+            ev?.push({ t: 'windup', id: e.id });
+          } else {
+            fireSpits(state, cfg, e, def, ux, uy, damageScale, ev);
+            e.timer = ticks(cfg, def.shotCooldown ?? 2);
+          }
+        }
+      }
+    } else if (def.behavior === 'bomb') {
+      if (e.mode === 0) {
+        e.x += ux * walk;
+        e.y += uy * walk;
+        if (d < (def.triggerRange ?? 45)) {
+          e.mode = 1;
+          e.timer = ticks(cfg, def.fuse ?? 0.6);
+          ev?.push({ t: 'windup', id: e.id });
+        }
+      } else if (--e.timer <= 0) {
+        const blast = def.blastRadius ?? 60;
+        if (d < blast + pt.radius) hurtPlayer(state, (def.blastDamage ?? 20) * damageScale, cfg, ev);
+        e.hp = 0;
+        ev?.push({ t: 'explode', x: e.x, y: e.y, r: blast });
+      }
+    } else if (def.behavior === 'warden') {
+      e.x += ux * walk;
+      e.y += uy * walk;
+      if (e.timer > 0) e.timer--;
+      else {
+        const speed = (def.shotSpeed ?? 150) * dt;
+        for (const [rx, ry] of RADIAL) {
+          state.spits.push({
+            x: e.x + rx * def.radius,
+            y: e.y + ry * def.radius,
+            vx: rx * speed,
+            vy: ry * speed,
+            r: def.shotRadius ?? 6,
+            damage: (def.shotDamage ?? 10) * damageScale,
+          });
+        }
+        fireSpits(state, cfg, e, def, ux, uy, damageScale, ev);
+        e.timer = ticks(cfg, def.burstCooldown ?? 2.5);
+      }
+    } else if (def.behavior === 'summoner') {
+      const keep = def.keepRange ?? 170;
+      const slack = def.rangeSlack ?? 25;
       if (d > keep + slack) {
         e.x += ux * walk;
         e.y += uy * walk;
@@ -402,23 +548,32 @@ function updateEnemies(state: RunState, cfg: SimConfig, ev: Events): void {
         e.y -= uy * walk;
       }
       if (e.timer > 0) e.timer--;
-      else if (d < keep * 1.7) {
-        const shotStep = (def.shotSpeed ?? 140) * dt;
-        state.spits.push({
-          x: e.x + ux * def.radius,
-          y: e.y + uy * def.radius,
-          vx: ux * shotStep,
-          vy: uy * shotStep,
-          r: def.shotRadius ?? 5,
-          damage: (def.shotDamage ?? 8) * damageScale,
-        });
+      else {
+        fireSpits(state, cfg, e, def, ux, uy, damageScale, ev);
         e.timer = ticks(cfg, def.shotCooldown ?? 2);
-        ev?.push({ t: 'spit' });
+        // `mode` counts volleys. Every few volleys the boss calls in help.
+        e.mode++;
+        if (e.mode >= (def.summonEvery ?? 2)) {
+          e.mode = 0;
+          const room = (def.summonCap ?? 6) - (state.enemies.length - 1) - summoned.length;
+          const helper = enemyDef(cfg, def.summonType ?? cfg.enemies[0].id);
+          const n = Math.min(def.summonCount ?? 2, room);
+          for (let i = 0; i < n; i++) {
+            const [rx, ry] = RADIAL[(i * 3 + 1) % RADIAL.length];
+            summoned.push({ def: helper, x: e.x + rx * (def.radius + 12), y: e.y + ry * (def.radius + 12) });
+          }
+        }
       }
     } else {
       e.x += ux * walk;
       e.y += uy * walk;
     }
+  }
+
+  for (const s of summoned) {
+    addEnemy(state, cfg, s.def, s.x, s.y);
+    state.floorQuota++;
+    state.floorSpawned++;
   }
 
   // Keep enemies from stacking on top of each other.
@@ -446,14 +601,18 @@ function updateEnemies(state: RunState, cfg: SimConfig, ev: Events): void {
     const def = enemyDef(cfg, e.type);
     clampToArena(e, def.radius, cfg);
     pushOutOfPillars(e, def.radius, state);
-    if (dist(e.x, e.y, p.x, p.y) < def.radius + pt.radius) {
-      hurtPlayer(state, def.contactDamage * damageScale, cfg, ev);
+    if (e.hp > 0 && dist(e.x, e.y, p.x, p.y) < def.radius + pt.radius) {
+      const landed = hurtPlayer(state, def.contactDamage * damageScale, cfg, ev);
+      if (landed && p.stats.thorns > 0) {
+        e.hp -= p.stats.thorns;
+        ev?.push({ t: 'hit', id: e.id, x: e.x, y: e.y });
+      }
     }
   }
 }
 
 function updateShots(state: RunState, cfg: SimConfig, ev: Events): void {
-  const projR = cfg.tuning.player.projRadius;
+  const projR = cfg.tuning.player.projRadius * state.player.stats.projSize;
   const { width, height } = cfg.tuning.arena;
   let kept = 0;
   for (const s of state.shots) {
@@ -468,7 +627,7 @@ function updateShots(state: RunState, cfg: SimConfig, ev: Events): void {
         if (dist(s.x, s.y, e.x, e.y) >= enemyDef(cfg, e.type).radius + projR) continue;
         e.hp -= s.damage;
         s.hit.push(e.id);
-        ev?.push({ t: 'hit', id: e.id, x: s.x, y: s.y });
+        ev?.push({ t: 'hit', id: e.id, x: s.x, y: s.y, crit: s.crit });
         if (s.pierce <= 0) {
           alive = false;
           break;
@@ -515,27 +674,48 @@ function updateNova(state: RunState, cfg: SimConfig, ev: Events): void {
       ev?.push({ t: 'hit', id: e.id, x: e.x, y: e.y });
     }
   }
-  p.novaTimer = ticks(cfg, cfg.tuning.nova.interval);
+  p.novaTimer = ticks(cfg, cfg.tuning.nova.interval * p.stats.novaRate);
   ev?.push({ t: 'nova', x: p.x, y: p.y, r });
 }
 
 function removeDead(state: RunState, cfg: SimConfig, ev: Events): void {
   const dr = cfg.tuning.drops;
+  const stats = state.player.stats;
+  const spawned: { def: EnemyDef; x: number; y: number }[] = [];
   let kept = 0;
   for (const e of state.enemies) {
     if (e.hp > 0) {
       state.enemies[kept++] = e;
       continue;
     }
+    const def = enemyDef(cfg, e.type);
     state.kills++;
     state.floorKills++;
-    ev?.push({ t: 'kill', x: e.x, y: e.y, type: e.type });
-    if (state.player.stats.healOnKill > 0) healPlayer(state, state.player.stats.healOnKill);
-    if (rand(state) < dr.heartChance) {
-      state.drops.push({ x: e.x, y: e.y, life: ticks(cfg, dr.lifetime) });
+    ev?.push({ t: 'kill', x: e.x, y: e.y, type: e.type, boss: !!def.boss });
+    if (stats.healOnKill > 0) healPlayer(state, stats.healOnKill);
+
+    const life = ticks(cfg, dr.lifetime);
+    if (def.boss) {
+      state.drops.push({ x: e.x - 14, y: e.y, life }, { x: e.x + 14, y: e.y, life });
+    } else if (rand(state) < dr.heartChance + stats.dropBonus) {
+      state.drops.push({ x: e.x, y: e.y, life });
+    }
+
+    if (def.splitInto) {
+      const child = enemyDef(cfg, def.splitInto);
+      const n = def.splitCount ?? 2;
+      for (let i = 0; i < n; i++) {
+        const [rx, ry] = RADIAL[(i * 3) % RADIAL.length];
+        spawned.push({ def: child, x: e.x + rx * def.radius, y: e.y + ry * def.radius });
+      }
     }
   }
   state.enemies.length = kept;
+  for (const s of spawned) {
+    addEnemy(state, cfg, s.def, s.x, s.y);
+    state.floorQuota++;
+    state.floorSpawned++;
+  }
 }
 
 function updateDrops(state: RunState, cfg: SimConfig, ev: Events): void {
@@ -559,7 +739,7 @@ function updateFloor(state: RunState, cfg: SimConfig, ev: Events): void {
   const p = state.player;
   const { width, height } = cfg.tuning.arena;
 
-  if (!state.exit && state.floorKills >= state.floorQuota) {
+  if (!state.exit && state.floorSpawned >= state.floorQuota && state.enemies.length === 0) {
     let x = width / 2;
     let y = height / 2;
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -576,22 +756,43 @@ function updateFloor(state: RunState, cfg: SimConfig, ev: Events): void {
   }
 
   if (state.exit && dist(state.exit.x, state.exit.y, p.x, p.y) < f.exitRadius + cfg.tuning.player.radius) {
-    healPlayer(state, f.healOnClimb);
+    healPlayer(state, f.healOnClimb + p.stats.climbHeal);
     enterFloor(state, state.floor + 1, cfg);
-    ev?.push({ t: 'climb', floor: state.floor });
+    ev?.push({ t: 'climb', floor: state.floor, boss: isBossFloor(state.floor, cfg) });
   }
 }
 
+/**
+ * Offer upgrades for the next carrier. Whenever the pool allows it, the offer holds at least
+ * one safe option and one risky one, so the choice is always a real decision.
+ */
 function rollOffers(state: RunState, cfg: SimConfig): void {
-  const pool = cfg.upgrades.map((u) => u.id);
-  const n = Math.min(cfg.tuning.upgradeChoices, pool.length);
+  const n = Math.min(cfg.tuning.upgradeChoices, cfg.upgrades.length);
+  const pick = (pool: string[]): string | null => {
+    const open = pool.filter((id) => !state.offers.includes(id));
+    return open.length ? open[randInt(state, open.length)] : null;
+  };
+  const safe = cfg.upgrades.filter((u) => u.kind !== 'risky').map((u) => u.id);
+  const risky = cfg.upgrades.filter((u) => u.kind === 'risky').map((u) => u.id);
+  const all = cfg.upgrades.map((u) => u.id);
+
   state.offers = [];
-  for (let i = 0; i < n; i++) {
-    const j = i + randInt(state, pool.length - i);
-    const picked = pool[j];
-    pool[j] = pool[i];
-    pool[i] = picked;
-    state.offers.push(picked);
+  for (const pool of [safe, risky]) {
+    if (state.offers.length >= n) break;
+    const id = pick(pool);
+    if (id) state.offers.push(id);
+  }
+  while (state.offers.length < n) {
+    const id = pick(all);
+    if (!id) break;
+    state.offers.push(id);
+  }
+  // Shuffle so the safe option is not always the top card.
+  for (let i = state.offers.length - 1; i > 0; i--) {
+    const j = randInt(state, i + 1);
+    const tmp = state.offers[i];
+    state.offers[i] = state.offers[j];
+    state.offers[j] = tmp;
   }
 }
 
@@ -639,8 +840,14 @@ export function chooseUpgrade(state: RunState, index: number, cfg: SimConfig = d
     if (fx.op === 'add') stats[fx.stat] += fx.value;
     else stats[fx.stat] *= fx.value;
   }
+  // Keep every stat inside its allowed range, so no stack of upgrades can break the game.
+  const limits = cfg.tuning.statLimits as Record<string, number[] | undefined>;
+  for (const key of Object.keys(stats) as (keyof PlayerStats)[]) {
+    const range = limits[key];
+    if (range) stats[key] = Math.max(range[0], Math.min(range[1], stats[key]));
+  }
   if (def.heal) state.player.hp += def.heal;
-  state.player.hp = Math.min(state.player.hp, stats.maxHp);
+  state.player.hp = Math.max(1, Math.min(state.player.hp, stats.maxHp));
 
   state.upgrades.push(id);
   state.offers = [];

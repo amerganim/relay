@@ -72,3 +72,28 @@ for (const row of rows) {
   const flag = ratio > 2 ? '  <-- more than twice the average' : ratio < 0.5 ? '  <-- less than half the average' : '';
   console.log(`${row.id.padEnd(15)}${String(row.n).padStart(4)}   ${row.floor.toFixed(1).padStart(8)}   ${ratio.toFixed(2).padStart(8)}x${flag}`);
 }
+
+// Upgrade pairs: a combination is flagged when runs holding both get more than twice as far as average.
+const pairs = new Map<string, number[]>();
+for (const r of results) {
+  const owned = [...new Set(r.upgrades)].sort();
+  for (let i = 0; i < owned.length; i++) {
+    for (let j = i + 1; j < owned.length; j++) {
+      const key = `${owned[i]} + ${owned[j]}`;
+      const list = pairs.get(key) ?? [];
+      list.push(r.floor);
+      pairs.set(key, list);
+    }
+  }
+}
+const minSample = Math.max(8, Math.floor(runs / 100));
+const ranked = [...pairs]
+  .filter(([, floors]) => floors.length >= minSample)
+  .map(([key, floors]) => ({ key, n: floors.length, ratio: overall > 0 ? mean(floors) / overall : 0 }))
+  .sort((a, b) => b.ratio - a.ratio);
+const broken = ranked.filter((p) => p.ratio > 2);
+console.log(`\nupgrade pairs with at least ${minSample} runs: ${ranked.length}`);
+console.log(broken.length ? 'pairs more than twice the average:' : 'no pair is more than twice the average. strongest five:');
+for (const p of (broken.length ? broken : ranked.slice(0, 5))) {
+  console.log(`  ${p.key.padEnd(34)} ${String(p.n).padStart(4)} runs  ${p.ratio.toFixed(2)}x`);
+}

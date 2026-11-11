@@ -3,6 +3,8 @@ import { SIM_VERSION, cloneConfig, type RunState, type SegmentLog, type SimConfi
 const SAVE_KEY = 'relay.save';
 const BEST_KEY = 'relay.best';
 const TUNING_KEY = 'relay.tuning';
+const DAILY_KEY = 'relay.daily';
+const TUTORIAL_KEY = 'relay.tutorial';
 
 /** Tuning overrides as dotted paths into the config, for example "tuning.player.moveSpeed". */
 export type Overrides = Record<string, number>;
@@ -66,6 +68,29 @@ export function loadBest(): number {
 
 export function storeBest(floor: number): void {
   write(BEST_KEY, floor);
+}
+
+/** Today as a number like 20261112 (UTC), which is also the seed of the Daily run. */
+export function dailySeed(now = new Date()): number {
+  return now.getUTCFullYear() * 10000 + (now.getUTCMonth() + 1) * 100 + now.getUTCDate();
+}
+
+/** Best floor reached on today's Daily run on this device. */
+export function loadDailyBest(): number {
+  const saved = read<{ day: number; floor: number }>(DAILY_KEY);
+  return saved && saved.day === dailySeed() ? saved.floor : 0;
+}
+
+export function storeDailyBest(floor: number): void {
+  write(DAILY_KEY, { day: dailySeed(), floor });
+}
+
+export function tutorialDone(): boolean {
+  return read<boolean>(TUTORIAL_KEY) === true;
+}
+
+export function finishTutorial(): void {
+  write(TUTORIAL_KEY, true);
 }
 
 export function loadOverrides(): Overrides {

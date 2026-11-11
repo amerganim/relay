@@ -11,5 +11,5 @@ import { playRunWithBot } from './helpers';
 it('golden run: seed 20261111, two bot segments', () => {
   const state = createRun(20261111);
   playRunWithBot(state, 2);
-  expect(`${state.phase} floor ${state.floor} kills ${state.kills} ${hashState(state)}`).toMatchInlineSnapshot(`"handoff floor 7 kills 79 e3f81a666b270475"`);
+  expect(`${state.phase} floor ${state.floor} kills ${state.kills} ${hashState(state)}`).toMatchInlineSnapshot(`"handoff floor 8 kills 77 7e7aa0b595e171f2"`);
 });

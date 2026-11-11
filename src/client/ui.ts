@@ -1,10 +1,19 @@
 import type { Timeline } from '../relay/types';
 import settings from '../relay/data/relay.json';
-import { defaultConfig, segmentTicks, type RunState } from '../sim';
+import { defaultConfig, enemyDef, isBossFloor, segmentTicks, type RunState } from '../sim';
 import { api, shareUrl } from './api';
 import type { Sfx } from './audio';
 import type { Controller } from './controller';
-import { getPath, loadBest, loadSave, storeOverrides, type Overrides } from './storage';
+import {
+  finishTutorial,
+  getPath,
+  loadBest,
+  loadDailyBest,
+  loadSave,
+  storeOverrides,
+  tutorialDone,
+  type Overrides,
+} from './storage';
 import { strings } from './strings';
 
 type Child = Node | string | null | undefined | false;
@@ -40,6 +49,8 @@ const TUNING_FIELDS: [string, string, number, number, number][] = [
 export interface UiActions {
   /** Start a solo run on this device. */
   startRun: () => void;
+  /** Start today's Daily run: the same seed for everyone. */
+  startDaily: () => void;
   continueRun: () => void;
   /** True when a relay backend is configured. */
   relay: boolean;
@@ -59,11 +70,18 @@ export class Ui {
   private timeFill = el('div', 'bar-fill time');
   private hpFill = el('div', 'bar-fill hp');
   private hpLabel = el('div', 'hud-hp-label');
+  private bossFill = el('div', 'bar-fill boss');
+  private bossLabel = el('div', 'boss-name');
+  private bossBar = el('div', 'boss-bar', this.bossLabel, el('div', 'bar boss-track', this.bossFill));
   private muteButton = el('button', 'hud-mute');
   private overlay = el('div', 'overlay');
   private cache: Record<string, string> = {};
   private lastSecond = -1;
   private floorTaps: number[] = [];
+  private hint = el('div', 'hint-banner');
+  /** First-run coaching: 0 move, 1 fight, 2 take the stairs, 3 finished. */
+  private hintStep = tutorialDone() ? 3 : 0;
+  private hintStart: { x: number; y: number } | null = null;
 
   constructor(
     private root: HTMLElement,
@@ -82,8 +100,9 @@ export class Ui {
       el('div', 'bar', this.timeFill),
       top,
       el('div', 'bar hp-bar', this.hpFill, this.hpLabel),
+      this.bossBar,
     );
-    this.root.append(this.hud, this.overlay);
+    this.root.append(this.hud, this.hint, this.overlay);
 
     this.muteButton.addEventListener('click', () => {
       this.sfx.unlock();
@@ -124,6 +143,10 @@ export class Ui {
     const seconds = Math.ceil(left / cfg.tuning.tickRate);
 
     this.set('floor', this.floorLabel, strings.floor(state.floor));
+    const boss = isBossFloor(state.floor, cfg) ? state.enemies.find((e) => enemyDef(cfg, e.type).boss) : undefined;
+    this.set('boss', this.bossLabel, boss ? enemyDef(cfg, boss.type).name : '');
+    this.bossBar.classList.toggle('on', !!boss);
+    if (boss) this.bossFill.style.width = `${((boss.hp / boss.maxHp) * 100).toFixed(1)}%`;
     this.set('leg', this.legLabel, strings.leg(state.segment + 1));
     this.set('timer', this.timerLabel, String(seconds));
     this.set('goal', this.goalLabel, state.exit ? strings.stairsOpen : `${state.floorKills}/${state.floorQuota}`);
@@ -140,6 +163,7 @@ export class Ui {
       this.hpFill.style.width = hpWidth;
     }
 
+    this.updateHints(state);
     const urgent = seconds <= 5 && state.phase === 'play';
     this.timerLabel.classList.toggle('urgent', urgent);
     this.goalLabel.classList.toggle('open', !!state.exit);
@@ -147,7 +171,28 @@ export class Ui {
     this.lastSecond = seconds;
   }
 
+  /** A three-step tutorial that plays out inside the first run and takes well under 30 seconds. */
+  private updateHints(state: RunState): void {
+    if (this.hintStep >= 3) return;
+    const p = state.player;
+    this.hintStart ??= { x: p.x, y: p.y };
+    if (state.floor > 1) {
+      this.hintStep = 3;
+      finishTutorial();
+    } else if (this.hintStep === 0) {
+      const dx = p.x - this.hintStart.x;
+      const dy = p.y - this.hintStart.y;
+      if (dx * dx + dy * dy > 50 * 50) this.hintStep = 1;
+    } else if (this.hintStep === 1 && state.exit) {
+      this.hintStep = 2;
+    }
+    const text = state.phase === 'play' && this.hintStep < 3 ? strings.hints[this.hintStep] : '';
+    this.set('hint', this.hint, text);
+    this.hint.classList.toggle('on', text !== '');
+  }
+
   setHudVisible(visible: boolean): void {
+    if (!visible) this.hint.classList.remove('on');
     this.hud.classList.toggle('on', visible);
   }
 
@@ -185,6 +230,8 @@ export class Ui {
           this.button(strings.playSolo, () => this.actions.startRun()),
         ]
       : [this.button(strings.play, () => this.actions.startRun(), main)];
+    const dailyBest = loadDailyBest();
+    entry.push(this.button(strings.daily, () => this.actions.startDaily()));
     this.show(
       'title',
       el('div', 'flame'),
@@ -194,6 +241,7 @@ export class Ui {
         this.button(strings.continue(save.state.floor, save.state.segment + 1), () => this.actions.continueRun(), 'btn primary'),
       ...entry,
       el('p', 'hint', strings.howTo),
+      el('p', 'best', dailyBest > 0 ? strings.dailyBest(dailyBest) : strings.dailyNote),
       best > 0 && el('p', 'best', strings.best(best)),
     );
   }
@@ -201,7 +249,14 @@ export class Ui {
   showUpgrade(state: RunState): void {
     const cards = state.offers.map((id, i) => {
       const def = this.controller.cfg.upgrades.find((u) => u.id === id);
-      const card = el('button', 'card', el('span', 'card-name', def?.name ?? id), el('span', 'card-desc', def?.desc ?? ''));
+      const risky = def?.kind === 'risky';
+      const card = el(
+        'button',
+        risky ? 'card risky' : 'card',
+        el('span', 'card-name', def?.name ?? id),
+        el('span', 'card-desc', def?.desc ?? ''),
+        risky && el('span', 'card-tag', strings.risky),
+      );
       card.addEventListener('click', () => {
         this.sfx.unlock();
         this.sfx.play('pick');

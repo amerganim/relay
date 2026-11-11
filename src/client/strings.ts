@@ -30,6 +30,15 @@ export const strings = {
   tuningCopy: 'Copy as JSON',
   tuningCopied: 'Copied',
   close: 'Close',
+  risky: 'RISKY',
+  daily: 'Daily run',
+  dailyBest: (floor: number) => `Today: floor ${floor}`,
+  dailyNote: 'Everyone gets the same tower today.',
+  hints: [
+    'Drag anywhere to move',
+    'You attack on your own. Clear the floor.',
+    'Stairs are open. Touch them to climb.',
+  ],
   // Relay mode
   carryRun: 'Carry a run',
   takeTorch: 'Take the torch',

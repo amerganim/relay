@@ -491,3 +491,66 @@ body {
   border: 1px solid var(--panel-edge);
   cursor: pointer;
 }
+
+/* Risky upgrade cards and the boss bar */
+.card.risky {
+  border-left-color: var(--danger);
+  position: relative;
+}
+.card.risky .card-name {
+  color: #ff9fb0;
+}
+.card-tag {
+  position: absolute;
+  top: 3cqw;
+  right: 4cqw;
+  font-size: 2.6cqw;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--danger);
+}
+.boss-bar {
+  display: none;
+  margin: 2cqw 12cqw 0;
+  text-align: center;
+}
+.boss-bar.on {
+  display: block;
+}
+.boss-name {
+  font-size: 3.2cqw;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ff9fb0;
+  margin-bottom: 0.8cqw;
+}
+.boss-track {
+  height: 1.8cqw;
+  border-radius: 1cqw;
+  overflow: hidden;
+  background: #00000080;
+}
+.bar-fill.boss {
+  background: var(--danger);
+}
+
+/* First-run hints */
+.hint-banner {
+  display: none;
+  position: absolute;
+  left: 8cqw;
+  right: 8cqw;
+  bottom: 9cqh;
+  padding: 3cqw 4cqw;
+  border-radius: 3cqw;
+  background: #0d0b14d9;
+  border: 1px solid var(--torch);
+  color: var(--torch-hot);
+  font-weight: 700;
+  text-align: center;
+  text-wrap: balance;
+}
+.hint-banner.on {
+  display: block;
+}

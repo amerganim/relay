@@ -21,10 +21,11 @@ A run ends when a carrier dies. Score is the number of floors climbed by the who
 - **Controls:** one thumb. Drag anywhere on screen and the torchbearer moves in the drag direction. Release to stop. Attacking is automatic.
 - **Arena:** one portrait screen per floor (assumption). Each floor has pillars placed from the run seed.
 - **Floors:** every floor has a kill quota. When it is met, stairs appear. Touching the stairs climbs to the next floor and heals a little. Higher floors spawn enemies faster and with more health.
-- **Enemies (Phase 1):** the Grunt walks at you, the Dasher winds up and charges, the Spitter keeps its distance and shoots slow embers.
+- **Enemies:** the Grunt walks at you, the Dasher winds up and charges, the Spitter keeps its distance and shoots slow embers. From floor 3 come Swarmers (fast and fragile), Brutes (slow and tough), Bombers (run in and explode), Snipers (a visible aim line, then a fast shot) and Splitters (burst into Swarmers).
+- **Bosses:** every fifth floor. The Warden walks you down and fires rings of embers. The Matriarch keeps her distance, fires fans and calls Swarmers.
 - **Timer:** 60 seconds. When it ends the action freezes and three upgrades are offered.
 - **Death:** health reaching zero ends the run for everyone.
-- **Upgrades (Phase 1, 10 total):** Sharp Embers, Quick Hands, Fleet Feet, Iron Heart, Split Shot, Piercing Flame, Long Reach, Second Wind, Flame Nova, Blood Torch. All are plain stat changes defined in `src/sim/data/upgrades.json`.
+- **Upgrades (30 total):** 20 safe and 10 risky, all plain stat changes defined in `src/sim/data/upgrades.json`. Every offer of three holds at least one safe and one risky option. A risky upgrade trades a clear strength for a clear cost, and none is purely harmful.
 - **Feedback:** hit flashes, screen shake, synthesized sound and phone vibration.
 
 In Phase 1 there is no backend. After choosing an upgrade you hand the run to yourself and play the next segment, which tests whether the minute is fun on its own.

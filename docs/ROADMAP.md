@@ -49,14 +49,16 @@ The handoff rules are built and tested against an in-memory store and a local se
 
 ## Phase 3: Content, modes and anti-griefing
 
-- [ ] Expand to 30 upgrades, 8 enemy types and 2 bosses
-- [ ] Handoff choices always pair a safe option with a risky one, never a purely harmful one
-- [ ] Daily Relay: one shared seed, one global leaderboard
+- [x] Expand to 30 upgrades, 8 enemy types and 2 bosses (a boss guards every fifth floor)
+- [x] Handoff choices always pair a safe option with a risky one, never a purely harmful one
+- [~] Daily Relay: one shared seed per UTC day, with a best score kept on the device (the global leaderboard needs the backend)
 - [ ] Friend chains: private relays started from a link
 - [ ] Rescue runs: a queue of nearly dead runs with bonus rewards
 - [ ] Reputation score that influences which runs a player receives
-- [ ] First-time tutorial under 30 seconds, played on a bot-seeded run
-- [x] Headless balance simulator (done in Phase 1; extend it to report upgrade combinations)
+- [~] First-time tutorial under 30 seconds: three in-run hints on the first run (not yet tied to a bot-seeded relay run)
+- [x] Headless balance simulator, reporting single upgrades and upgrade pairs against the average
+
+Balance note: at full skill the bot carries a run for about 4.6 legs and reaches floor 12 at the median. The gate asks for a median chain of 8, so expect to ease the late floors once real players are measured. No upgrade pair performs more than twice the average.
 
 **Gate (owner):** [ ] a closed test with 100 or more players shows day-1 retention of at least 35% and a median chain of 8 or more handoffs.
 
