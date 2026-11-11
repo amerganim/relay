@@ -7,6 +7,13 @@ const TUNING_KEY = 'relay.tuning';
 /** Tuning overrides as dotted paths into the config, for example "tuning.player.moveSpeed". */
 export type Overrides = Record<string, number>;
 
+/** Set while the run being played belongs to the relay backend rather than this device alone. */
+export interface RelayInfo {
+  runId: string;
+  claimToken: string;
+  segmentIndex: number;
+}
+
 export interface SaveData {
   v: number;
   overrides: Overrides;
@@ -15,6 +22,7 @@ export interface SaveData {
   log: SegmentLog;
   /** The run exactly as it was when saved. */
   state: RunState;
+  relay?: RelayInfo;
 }
 
 function read<T>(key: string): T | null {

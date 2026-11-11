@@ -1,4 +1,7 @@
+import type { Timeline } from '../relay/types';
+import settings from '../relay/data/relay.json';
 import { defaultConfig, segmentTicks, type RunState } from '../sim';
+import { api, shareUrl } from './api';
 import type { Sfx } from './audio';
 import type { Controller } from './controller';
 import { getPath, loadBest, loadSave, storeOverrides, type Overrides } from './storage';
@@ -35,8 +38,16 @@ const TUNING_FIELDS: [string, string, number, number, number][] = [
 ];
 
 export interface UiActions {
+  /** Start a solo run on this device. */
   startRun: () => void;
   continueRun: () => void;
+  /** True when a relay backend is configured. */
+  relay: boolean;
+  /** The run id from a share link, if the page was opened through one. */
+  linkedRun: () => string | null;
+  carryRun: () => void;
+  takeRun: (runId: string) => void;
+  startRelayRun: () => void;
 }
 
 export class Ui {
@@ -163,6 +174,17 @@ export class Ui {
     const save = loadSave();
     const best = loadBest();
     this.setHudVisible(false);
+    const linked = this.actions.linkedRun();
+    const main = save ? 'btn' : 'btn primary';
+    const entry = this.actions.relay
+      ? [
+          linked
+            ? this.button(strings.takeTorch, () => this.actions.takeRun(linked), main)
+            : this.button(strings.carryRun, () => this.actions.carryRun(), main),
+          this.button(strings.startNewRun, () => this.actions.startRelayRun()),
+          this.button(strings.playSolo, () => this.actions.startRun()),
+        ]
+      : [this.button(strings.play, () => this.actions.startRun(), main)];
     this.show(
       'title',
       el('div', 'flame'),
@@ -170,7 +192,7 @@ export class Ui {
       el('p', 'tagline', strings.tagline),
       save &&
         this.button(strings.continue(save.state.floor, save.state.segment + 1), () => this.actions.continueRun(), 'btn primary'),
-      this.button(strings.play, () => this.actions.startRun(), save ? 'btn' : 'btn primary'),
+      ...entry,
       el('p', 'hint', strings.howTo),
       best > 0 && el('p', 'best', strings.best(best)),
     );
@@ -230,6 +252,87 @@ export class Ui {
     );
     this.overlay.classList.add('locked');
     window.setTimeout(() => this.overlay.classList.remove('locked'), 600);
+  }
+
+  /** A waiting screen while talking to the relay. */
+  showBusy(text: string): void {
+    this.show('busy', el('div', 'flame small'), el('p', 'sub', text));
+  }
+
+  showError(code: string): void {
+    this.setHudVisible(false);
+    this.show(
+      'error',
+      el('h2', '', strings.errors[code] ?? strings.errors.offline),
+      this.button(strings.back, () => this.showTitle(), 'btn primary'),
+    );
+  }
+
+  /** Who carried the run and how far each got, with the share link and the emote picker. */
+  showTimeline(timeline: Timeline, runId: string): void {
+    this.setHudVisible(false);
+    const dead = timeline.run.status === 'dead';
+    const upgradeName = (id: string | null) =>
+      id ? (this.controller.cfg.upgrades.find((u) => u.id === id)?.name ?? id) : '';
+
+    const rows = timeline.segments.map((s) =>
+      el(
+        'div',
+        s.mine ? 'leg mine' : 'leg',
+        el('span', 'leg-n', String(s.index + 1)),
+        el('span', 'leg-who', s.mine ? strings.you : s.isBot ? strings.bot : strings.carrier(s.carrier)),
+        el('span', 'leg-floors', strings.floors(s.floorStart, s.floorEnd)),
+        el('span', 'leg-note', s.died ? strings.fell : upgradeName(s.upgrade), s.emotes.length ? ` ${s.emotes.join('')}` : ''),
+      ),
+    );
+
+    const mine = [...timeline.segments].reverse().find((s) => s.mine);
+    const emoteRow =
+      mine && mine.emotes.length === 0
+        ? el(
+            'div',
+            'emotes',
+            ...settings.emotes.map((emote) => {
+              const b = el('button', 'emote', emote);
+              b.setAttribute('aria-label', `${strings.leaveEmote} ${emote}`);
+              b.addEventListener('click', async () => {
+                emoteRow?.classList.add('sent');
+                const res = await api.emote(runId, mine.index, emote);
+                if (res.ok) {
+                  const again = await api.timeline(runId);
+                  if (again.ok) this.showTimeline(again, runId);
+                }
+              });
+              return b;
+            }),
+          )
+        : null;
+
+    const share = this.button(strings.share, async () => {
+      const url = shareUrl(runId);
+      try {
+        if (navigator.share) await navigator.share({ title: strings.title, text: strings.tagline, url });
+        else {
+          await navigator.clipboard.writeText(url);
+          share.textContent = strings.copied;
+        }
+      } catch {
+        // The share sheet was closed. Nothing to do.
+      }
+    });
+
+    this.show(
+      'timeline',
+      el('h2', '', dead ? strings.deadTitle : strings.passedTitle),
+      el('p', 'big', strings.floor(timeline.run.floor)),
+      !dead && el('p', 'sub', strings.passedBody),
+      el('div', 'legs', ...rows),
+      emoteRow && el('p', 'label', strings.leaveEmote),
+      emoteRow,
+      !dead && share,
+      this.button(strings.carryAnother, () => this.actions.carryRun(), 'btn primary'),
+      this.button(strings.back, () => this.showTitle()),
+    );
   }
 
   showPaused(): void {
@@ -296,7 +399,8 @@ export class Ui {
   /** Show whichever overlay matches the run's current phase. */
   showForPhase(state: RunState): void {
     if (state.phase === 'upgrade') this.showUpgrade(state);
-    else if (state.phase === 'handoff') this.showHandoff(state);
+    else if (state.phase === 'handoff' && !this.controller.relay) this.showHandoff(state);
+    else if (state.phase === 'handoff') this.showBusy(strings.passing);
     else this.hideOverlay();
   }
 }

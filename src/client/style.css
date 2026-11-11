@@ -183,6 +183,12 @@ body {
 .overlay.title {
   background: radial-gradient(circle at 50% 32%, #3a2416 0%, #0d0b14 62%);
 }
+.overlay.timeline,
+.overlay.dead,
+.overlay.error,
+.overlay.busy {
+  background: #0d0b14eb;
+}
 .overlay.locked .panel {
   pointer-events: none;
 }
@@ -421,4 +427,67 @@ body {
   .overlay.on {
     animation: none;
   }
+}
+
+/* Relay timeline */
+.legs {
+  width: 100%;
+  max-height: 44cqh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1cqw;
+  touch-action: pan-y;
+}
+.leg {
+  display: grid;
+  grid-template-columns: 3ch 1fr auto;
+  gap: 0 2cqw;
+  align-items: baseline;
+  padding: 2cqw 3cqw;
+  border-radius: 2.4cqw;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  text-align: left;
+  font-size: 3.6cqw;
+}
+.leg.mine {
+  border-color: var(--torch);
+}
+.leg-n {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.leg-who {
+  font-weight: 700;
+}
+.leg.mine .leg-who {
+  color: var(--torch-hot);
+}
+.leg-floors {
+  font-variant-numeric: tabular-nums;
+}
+.leg-note {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 3.2cqw;
+}
+.emotes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.6cqw;
+}
+.emotes.sent {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.emote {
+  all: unset;
+  font-size: 6cqw;
+  padding: 1.2cqw 1.8cqw;
+  border-radius: 2.4cqw;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  cursor: pointer;
 }

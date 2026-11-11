@@ -4,16 +4,19 @@ import {
   beginSegment,
   chooseUpgrade,
   createRun,
+  deserializeRun,
+  hashState,
   quantizeInput,
   serializeRun,
   step,
   type Input,
   type Phase,
   type RunState,
+  type SegmentLog,
   type SimConfig,
   type SimEvent,
 } from '../sim';
-import { clearSave, configWith, storeSave, type Overrides, type SaveData } from './storage';
+import { clearSave, configWith, storeSave, type Overrides, type RelayInfo, type SaveData } from './storage';
 
 const MAX_STEPS_PER_FRAME = 6;
 
@@ -26,6 +29,8 @@ export class Controller {
   overrides: Overrides;
   state: RunState | null = null;
   paused = true;
+  /** Set when the current run came from the relay backend. */
+  relay: RelayInfo | null = null;
   /** Fraction of a tick left over after the last step, for the renderer to interpolate with. */
   alpha = 0;
 
@@ -54,6 +59,7 @@ export class Controller {
   }
 
   newRun(seed: number): void {
+    this.relay = null;
     this.state = createRun(seed, this.cfg);
     this.startRecording();
     this.paused = false;
@@ -61,8 +67,26 @@ export class Controller {
     this.onPhase(this.state.phase);
   }
 
+  /** Start playing a run handed out by the relay backend. Relay runs always use the default tuning. */
+  startFromGrant(stateJson: string, relay: RelayInfo): void {
+    this.setOverrides({});
+    this.relay = relay;
+    this.state = deserializeRun(stateJson);
+    this.startRecording();
+    this.paused = false;
+    this.save();
+    this.onPhase(this.state.phase);
+  }
+
+  /** The finished segment as the server needs it: the input log and this client's own end-state hash. */
+  segmentResult(): { log: SegmentLog; hash: string } | null {
+    if (!this.state || this.state.phase === 'play' || this.state.phase === 'upgrade') return null;
+    return { log: this.recorder.log, hash: hashState(this.state) };
+  }
+
   resume(save: SaveData): void {
     this.setOverrides(save.overrides);
+    this.relay = save.relay ?? null;
     this.state = save.state;
     this.segStart = save.segStart;
     this.recorder = new InputRecorder(save.log);
@@ -127,6 +151,14 @@ export class Controller {
     this.onPhase(this.state.phase);
   }
 
+  /** Forget the current run entirely, as after a leg has been handed to the relay. */
+  clear(): void {
+    this.state = null;
+    this.relay = null;
+    this.paused = true;
+    clearSave();
+  }
+
   save(): void {
     if (!this.state || this.state.phase === 'dead') return;
     this.ticksSinceSave = 0;
@@ -136,6 +168,7 @@ export class Controller {
       segStart: this.segStart,
       log: this.recorder.log,
       state: this.state,
+      relay: this.relay ?? undefined,
     });
   }
 

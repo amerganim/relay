@@ -31,16 +31,19 @@ Legend: `[x]` done, `[~]` built but waiting on something (noted next to it), `[ 
 
 ## Phase 2: Handoff system
 
-- [ ] Database tables for players, runs, segments and emotes
-- [ ] Anonymous sign-in on first play, with an optional upgrade to a real account later
-- [ ] Claim a run: a lock that expires after five minutes if the player leaves
-- [ ] Submit a segment: the client sends the seed and input log, and the server replays it to verify the result
-- [ ] Share links: `/r/<run id>` opens straight into play, with a preview image for chat apps
-- [ ] Run queue that decides which waiting run a player receives
-- [ ] Bot-played segments, so early players never wait for a run
-- [ ] Run timeline screen: who carried it, floors climbed, emotes left
+The handoff rules are built and tested against an in-memory store and a local server (`npm run relay` plus `npm run dev:relay`). The production backend waits on the owner: see `docs/PHASE2_PROPOSAL.md`.
+
+- [~] Database tables for players, runs, segments and emotes (proposed in `supabase/migrations/0001_relay.sql`, not applied: needs approval and a Supabase project)
+- [ ] Anonymous sign-in on first play, with an optional upgrade to a real account later (needs the Supabase project; the client uses a local anonymous id until then)
+- [x] Claim a run: a lock that expires after five minutes if the player leaves
+- [x] Submit a segment: the client sends the input log, and the server replays it with the Phase 1 simulation code to verify the result
+- [~] Share links: `?r=<run id>` opens straight into play (real `/r/<run id>` paths and the chat preview image need Cloudflare Pages or similar hosting)
+- [x] Run queue that decides which waiting run a player receives (longest-waiting first, never your own last run)
+- [x] Bot-played segments, so early players never wait for a run
+- [x] Run timeline screen: who carried it, floors climbed, emotes left
 - [ ] In-app inbox and web push for "your run reached floor N"
-- [ ] Playwright test: two simulated players complete a full handoff
+- [x] Playwright test: two simulated players complete a full handoff (`npm run test:e2e`)
+- [ ] Postgres store and Supabase edge functions wrapping the same `RelayService`
 
 **Gate (owner):** [ ] 20 testers on a mix of phones and desktop browsers complete a chain of 15 or more handoffs. No run is lost, duplicated or stuck.
 

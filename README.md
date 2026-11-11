@@ -40,6 +40,28 @@ npm run balance
 
 `npm run balance` lets bots play hundreds of runs and prints how far they get and how each upgrade performs.
 
+## Try a handoff locally
+
+The game runs solo unless it is pointed at a relay backend. To pass a run between two browsers on your machine, start the in-memory relay server in one terminal:
+
+```bash
+npm run relay
+```
+
+and the client in another:
+
+```bash
+npm run dev:relay
+```
+
+Open the client in two different browsers (or one normal and one private window), start a run in one, and choose "Carry a run" in the other. The automated version of this is:
+
+```bash
+npm run test:e2e
+```
+
+The production backend is proposed in [docs/PHASE2_PROPOSAL.md](docs/PHASE2_PROPOSAL.md) and waits for approval.
+
 ## Tuning
 
 Every gameplay number lives in `src/sim/data/`. To try values on a phone without a rebuild, open the hidden tuning panel: tap the floor label five times during a run, or add `?tune` to the URL.

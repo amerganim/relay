@@ -3,6 +3,7 @@ dist
 .env
 .env.*
 !.env.example
+!.env.relay
 *.local
 test-results
 playwright-report

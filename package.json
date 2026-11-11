@@ -5,19 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:relay": "vite --mode relay --port 5174 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "balance": "vite-node scripts/balance.ts"
+    "balance": "vite-node scripts/balance.ts",
+    "relay": "vite-node server/dev.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "phaser": "^4.2.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
     "eslint": "^10.14.0",
     "typescript": "^6.0.3",

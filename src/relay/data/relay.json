@@ -1,0 +1,9 @@
+{
+  "claimTtlSeconds": 300,
+  "minElapsedFactor": 0.8,
+  "queueScan": 20,
+  "botSkill": 0.9,
+  "botSeedAttempts": 4,
+  "emotes": ["🔥", "👏", "😅", "💀", "🙏", "❤️"],
+  "maxEmotesPerSegment": 1
+}

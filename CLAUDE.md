@@ -20,6 +20,7 @@ Check each library's current documentation before using it. Phaser, Vite, Supaba
 - `src/client/` is rendering, input, audio and UI. It reads simulation state and never writes it except through `step()` inputs.
 - `src/relay/` is the handoff protocol (claim, submit, verify). It is shared by the client and the server functions and reuses `src/sim` for replay verification.
 - `supabase/` holds the proposed schema and edge functions. Nothing there is applied until the owner approves it.
+- `server/dev.ts` is the local relay server for development and end-to-end tests.
 - `tests/` holds Vitest tests. `e2e/` holds Playwright tests.
 
 ## Commands
@@ -29,6 +30,8 @@ Check each library's current documentation before using it. Phaser, Vite, Supaba
 - `npm run lint` runs ESLint. `npm run typecheck` runs the TypeScript compiler.
 - `npm run build` typechecks and builds to `dist/`.
 - `npm run balance` runs the headless bot simulator and prints upgrade win rates.
+- `npm run relay` starts the in-memory relay server. `npm run dev:relay` starts the client pointed at it.
+- `npm run test:e2e` runs the Playwright handoff tests (it starts both servers itself).
 
 ## Determinism checklist for simulation changes
 
