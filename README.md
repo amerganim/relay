@@ -1,5 +1,7 @@
 # Relay
 
+**Play the latest build:** https://amerganim.github.io/relay/
+
 Carry the torch for 60 seconds, pick one upgrade, and pass the run on.
 
 Relay is a mobile-first tower-climbing action game where one run is shared by many players. This repository holds the web client, the deterministic simulation and (from Phase 2) the handoff backend.

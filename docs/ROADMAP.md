@@ -7,7 +7,7 @@ Legend: `[x]` done, `[~]` built but waiting on something (noted next to it), `[ 
 ## Phase 0: Setup
 
 - [x] Create the repo with Vite, TypeScript and Phaser, plus linting and Vitest
-- [x] Add CI that runs tests and deploys on every push to `main` (GitHub Pages)
+- [x] Add CI that runs tests and deploys on every push to `main` (GitHub Pages: https://amerganim.github.io/relay/)
 - [ ] Per-branch preview deploys on Cloudflare Pages (needs the owner's Cloudflare account and token)
 - [x] Write CLAUDE.md with the rules
 - [x] Write docs/GDD.md

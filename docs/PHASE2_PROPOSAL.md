@@ -66,7 +66,7 @@ One detail matters: `runs.state` is `text`, not `jsonb`. The state hash is compu
 
 1. **Approve or change the schema and API above.**
 2. **Create a Supabase project** and enable anonymous sign-ins. Set these as environment variables or repository secrets, never in the repo: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
-3. **Choose hosting for the public URL.** GitHub Pages does not work for a private repository on the current plan. Either make the repository public, or create a Cloudflare Pages project and give CI a `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Cloudflare also gives real `/r/<run id>` paths and per-branch previews.
+3. **Hosting (decided 2026-11-12).** The repository is public and `main` deploys to GitHub Pages at https://amerganim.github.io/relay/. Cloudflare Pages is still needed later for per-branch previews and real `/r/<id>` paths.
 
 ## Once approved
 
